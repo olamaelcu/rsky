@@ -1,3 +1,9 @@
+#[cfg(not(any(feature = "disk", feature = "aws-s3", feature = "opendal")))]
+compile_error!(
+    "rsky-pds requires at least one of the `disk`, `aws-s3`, or `opendal` features. \
+     Build with e.g. `cargo build -p rsky-pds --features \"disk aws-s3\"`."
+);
+
 #[macro_use]
 extern crate serde_derive;
 extern crate core;
@@ -245,11 +251,16 @@ pub async fn build_rocket(rocket_cfg: Option<RocketConfig>) -> Rocket<Build> {
     let mut background_sequencer = sequencer.sequencer.write().await.clone();
     tokio::spawn(async move { background_sequencer.start().await });
 
+    #[cfg(feature = "aws-s3")]
     let aws_sdk_config = aws_config::from_env()
         .endpoint_url(env::var("AWS_ENDPOINT").unwrap_or("localhost".to_owned()))
         .load()
         .await;
-    let blobstore_factory = BlobstoreFactory::new(cfg.blobstore.clone(), aws_sdk_config);
+    let blobstore_factory = BlobstoreFactory::new(
+        cfg.blobstore.clone(),
+        #[cfg(feature = "aws-s3")]
+        aws_sdk_config,
+    );
 
     let id_resolver = SharedIdResolver {
         id_resolver: RwLock::new(IdResolver::new(IdentityResolverOpts {

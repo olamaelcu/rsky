@@ -28,6 +28,11 @@ pub enum BlobstoreConfig {
     S3 {
         bucket: Option<String>,
     },
+    #[cfg(feature = "opendal")]
+    Opendal {
+        operator_kind: String,
+        bucket: String,
+    },
 }
 
 pub fn blobstore_cfg_from(
