@@ -1,16 +1,18 @@
 #[cfg(feature = "aws-s3")]
 use crate::actor_store::aws::s3::S3BlobStore;
-#[cfg(feature = "disk")]
-use crate::actor_store::disk_blobstore::DiskBlobStore;
-#[cfg(feature = "opendal")]
-use crate::actor_store::opendal_blobstore::OpendalBlobStore;
 use crate::config::BlobstoreConfig;
 #[cfg(feature = "aws-s3")]
 use aws_config::SdkConfig;
 use std::path::Path;
 use std::sync::Arc;
 
-pub use rsky_blobstore::{BlobNotFoundError, BlobStore, BoxedBlobStream, MemoryBlobStore};
+pub use rsky_blobstore::{
+    BlobNotFoundError, BlobStore, BoxedBlobStream, MemoryBlobStore,
+};
+#[cfg(feature = "disk")]
+pub use rsky_blobstore::backends::disk::DiskBlobStore;
+#[cfg(feature = "opendal")]
+pub use rsky_blobstore::backends::opendal::OpendalBlobStore;
 
 type DynBlobStore = dyn BlobStore<Stream = BoxedBlobStream>;
 
@@ -56,11 +58,10 @@ impl BlobstoreFactory {
             BlobstoreConfig::Opendal {
                 operator_kind,
                 bucket,
-            } => Arc::new(OpendalBlobStore::new(
-                crate::actor_store::opendal_blobstore::build_operator(operator_kind, bucket)
+            } => Arc::new(
+                rsky_blobstore::backends::opendal::new_blobstore(operator_kind, bucket, did)
                     .expect("opendal operator builder failed"),
-                did,
-            )),
+            ),
             #[allow(unreachable_patterns)]
             _ => unreachable!(
                 "BlobstoreConfig variant matches no enabled backend feature. \

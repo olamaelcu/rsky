@@ -1,12 +1,11 @@
 // based on https://github.com/bluesky-social/atproto/blob/main/packages/pds/src/disk-blobstore.ts
-use crate::actor_store::blobstore::{BlobNotFoundError, BlobStore, BoxedBlobStream};
+use crate::blobstore::{BlobNotFoundError, BlobStore, BoxedBlobStream};
 use anyhow::{bail, Result};
 use bytes::Bytes;
 use futures::future::BoxFuture;
 use futures::stream::StreamExt;
 use futures::TryStreamExt;
 use lexicon_cid::Cid;
-use rand::RngCore;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use tokio_util::io::ReaderStream;
@@ -41,6 +40,7 @@ impl DiskBlobStore {
     }
 
     fn gen_key() -> String {
+        use rand::RngCore;
         let mut bytes = [0u8; 20];
         rand::thread_rng().fill_bytes(&mut bytes);
         data_encoding::BASE32_NOPAD.encode(&bytes).to_lowercase()
@@ -219,14 +219,18 @@ impl BlobStore for DiskBlobStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures::TryStreamExt;
-    use rsky_common::ipld::sha256_to_cid;
     use sha2::{Digest, Sha256};
 
     const TEST_DID: &str = "did:example:alice";
+    const SHA2_256: u64 = 0x12;
+    const RAWCODEC: u64 = 0x55;
 
     fn cid_for(bytes: &[u8]) -> Cid {
-        sha256_to_cid(Sha256::digest(bytes).to_vec())
+        let hash = Sha256::digest(bytes).to_vec();
+        Cid::new_v1(
+            RAWCODEC,
+            lexicon_cid::multihash::Multihash::<64>::wrap(SHA2_256, &hash).unwrap(),
+        )
     }
 
     fn test_store(dir: &Path) -> DiskBlobStore {

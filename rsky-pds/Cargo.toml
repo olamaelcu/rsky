@@ -42,7 +42,6 @@ lexicon_cid = { workspace = true }
 lru = "0.14"
 mailchecker = "6.0.1"
 mailgun-rs = "0.1.10"
-opendal = { version = "0.53", features = ["services-fs", "services-s3"], optional = true }
 rand = { workspace = true }
 rsky-oauth = { path = "../rsky-oauth", version = "0.2.0" }
 rand_core = { workspace = true }
@@ -71,7 +70,6 @@ sha2 = { workspace = true }
 thiserror = "1.0.40"
 time = "^0.3.36"
 tokio = { workspace = true }
-tokio-util = { workspace = true, optional = true }
 toml = "0.8.12"
 tracing = "0.1.41"
 tracing-subscriber = "0.3.19"
@@ -85,8 +83,8 @@ http-auth-basic = { version = "0.3.5" }
 
 [features]
 default = []
-disk = ["dep:tokio-util"]
+disk = ["rsky-blobstore/disk"]
 aws-s3 = ["dep:aws-config", "dep:aws-sdk-s3"]
-opendal = ["dep:opendal"]
+opendal = ["rsky-blobstore/opendal"]
 
 
