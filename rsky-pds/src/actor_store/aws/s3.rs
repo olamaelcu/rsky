@@ -1,5 +1,5 @@
 // based on https://github.com/bluesky-social/atproto/blob/main/packages/aws/src/s3.ts
-use crate::actor_store::blobstore::BlobStore;
+use crate::actor_store::blobstore::{BlobStore, BoxedBlobStream};
 use anyhow::Result;
 use aws_config::SdkConfig;
 use aws_sdk_s3 as s3;
@@ -7,7 +7,9 @@ use aws_sdk_s3::error::SdkError;
 use aws_sdk_s3::operation::put_object::builders::PutObjectFluentBuilder;
 use aws_sdk_s3::primitives::ByteStream;
 use aws_sdk_s3::types::{Delete, ObjectCannedAcl, ObjectIdentifier};
+use bytes::Bytes;
 use futures::future::BoxFuture;
+use futures::stream::StreamExt;
 use lexicon_cid::Cid;
 use rsky_common::get_random_str;
 
@@ -224,6 +226,8 @@ fn is_gcs_endpoint(endpoint_url: Option<&str>) -> bool {
 }
 
 impl BlobStore for S3BlobStore {
+    type Stream = BoxedBlobStream;
+
     fn put_temp(&self, bytes: Vec<u8>) -> BoxFuture<'_, Result<String>> {
         Box::pin(S3BlobStore::put_temp(self, bytes))
     }
@@ -248,8 +252,12 @@ impl BlobStore for S3BlobStore {
         Box::pin(S3BlobStore::get_bytes(self, cid))
     }
 
-    fn get_stream(&self, cid: Cid) -> BoxFuture<'_, Result<ByteStream>> {
-        Box::pin(S3BlobStore::get_stream(self, cid))
+    fn get_stream(&self, cid: Cid) -> BoxFuture<'_, Result<BoxedBlobStream>> {
+        Box::pin(async move {
+            let aggregated = S3BlobStore::get_bytes(self, cid).await?;
+            let buf: Bytes = aggregated.into();
+            Ok(futures::stream::once(async move { Ok(buf) }).boxed())
+        })
     }
 
     fn has_temp(&self, key: String) -> BoxFuture<'_, Result<bool>> {

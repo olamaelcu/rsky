@@ -1,5 +1,5 @@
 use super::*;
-use crate::actor_store::blobstore::MemoryBlobStore;
+use crate::actor_store::blobstore::{BlobStore, BoxedBlobStream, MemoryBlobStore};
 use rsky_repo::types::PreparedDelete;
 
 const TEST_DID: &str = "did:example:alice";
@@ -498,12 +498,14 @@ async fn destroy_deletes_blobs_from_blobstore() {
     assert!(blobs.stored_cids().is_empty());
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 struct FailingBlobStore {
     fail_delete_all: bool,
 }
 
 impl crate::actor_store::blobstore::BlobStore for FailingBlobStore {
+    type Stream = BoxedBlobStream;
+
     fn put_temp(&self, _bytes: Vec<u8>) -> futures::future::BoxFuture<'_, Result<String>> {
         Box::pin(async { bail!("blobstore unavailable") })
     }
@@ -533,7 +535,7 @@ impl crate::actor_store::blobstore::BlobStore for FailingBlobStore {
     fn get_stream(
         &self,
         _cid: Cid,
-    ) -> futures::future::BoxFuture<'_, Result<aws_sdk_s3::primitives::ByteStream>> {
+    ) -> futures::future::BoxFuture<'_, Result<BoxedBlobStream>> {
         Box::pin(async { bail!("blobstore unavailable") })
     }
     fn has_temp(&self, _key: String) -> futures::future::BoxFuture<'_, Result<bool>> {

@@ -7,7 +7,8 @@ use crate::auth_verifier;
 use crate::auth_verifier::OptionalAccessOrAdminToken;
 use anyhow::Result;
 use aws_sdk_s3::operation::get_object::GetObjectError;
-use aws_sdk_s3::primitives::AggregatedBytes;
+use bytes::Bytes;
+use futures::TryStreamExt;
 use lexicon_cid::Cid;
 use rocket::http::Header;
 use rocket::{Responder, State};
@@ -38,8 +39,9 @@ async fn inner_get_blob(
         .await?;
 
     let found = actor_store.blob.get_blob(cid).await?;
-    let buf: AggregatedBytes = found.stream.collect().await?;
-    Ok((buf.to_vec(), found.mime_type))
+    let chunks: Vec<Bytes> = found.stream.try_collect().await?;
+    let bytes: Vec<u8> = chunks.iter().flat_map(|b| b.iter().copied()).collect();
+    Ok((bytes, found.mime_type))
 }
 
 /// Get a blob associated with a given account. Returns the full blob as originally uploaded.

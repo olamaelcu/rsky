@@ -1,12 +1,15 @@
 // based on https://github.com/bluesky-social/atproto/blob/main/packages/pds/src/disk-blobstore.ts
-use crate::actor_store::blobstore::{BlobNotFoundError, BlobStore};
+use crate::actor_store::blobstore::{BlobNotFoundError, BlobStore, BoxedBlobStream};
 use anyhow::{bail, Result};
-use aws_sdk_s3::primitives::ByteStream;
+use bytes::Bytes;
 use futures::future::BoxFuture;
+use futures::stream::StreamExt;
+use futures::TryStreamExt;
 use lexicon_cid::Cid;
 use rand::RngCore;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
+use tokio_util::io::ReaderStream;
 
 const DELETE_MANY_CHUNK_SIZE: usize = 500;
 
@@ -100,6 +103,8 @@ async fn remove_dir_if_exists(path: &Path) -> Result<()> {
 }
 
 impl BlobStore for DiskBlobStore {
+    type Stream = BoxedBlobStream;
+
     fn put_temp(&self, bytes: Vec<u8>) -> BoxFuture<'_, Result<String>> {
         Box::pin(async move {
             self.ensure_temp().await?;
@@ -161,13 +166,14 @@ impl BlobStore for DiskBlobStore {
         })
     }
 
-    fn get_stream(&self, cid: Cid) -> BoxFuture<'_, Result<ByteStream>> {
+    fn get_stream(&self, cid: Cid) -> BoxFuture<'_, Result<BoxedBlobStream>> {
         Box::pin(async move {
             let path = self.stored_path(cid);
-            if !tokio::fs::try_exists(&path).await? {
-                return Err(BlobNotFoundError.into());
-            }
-            Ok(ByteStream::from_path(&path).await?)
+            let file = tokio::fs::File::open(&path).await.map_err(translate_err)?;
+            Ok(ReaderStream::new(file)
+                .map_err(anyhow::Error::from)
+                .map(|chunk| chunk.map(Bytes::from))
+                .boxed())
         })
     }
 
@@ -213,6 +219,7 @@ impl BlobStore for DiskBlobStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures::TryStreamExt;
     use rsky_common::ipld::sha256_to_cid;
     use sha2::{Digest, Sha256};
 
@@ -270,15 +277,14 @@ mod tests {
         assert!(!store.has_temp(key.clone()).await.unwrap());
         assert!(store.has_stored(cid).await.unwrap());
         assert_eq!(store.get_bytes(cid).await.unwrap(), bytes);
-        let streamed = store
+        let streamed: Vec<Bytes> = store
             .get_stream(cid)
             .await
             .unwrap()
-            .collect()
+            .try_collect()
             .await
-            .unwrap()
-            .to_vec();
-        assert_eq!(streamed, bytes);
+            .unwrap();
+        assert_eq!(streamed.concat(), bytes);
 
         // temp key is a 32-char base32 string
         assert_eq!(key.len(), 32);
@@ -366,8 +372,10 @@ mod tests {
         assert!(store.quarantine_path(cid).is_file());
         let not_found = store.get_bytes(cid).await.unwrap_err();
         assert!(not_found.downcast_ref::<BlobNotFoundError>().is_some());
-        let not_found = store.get_stream(cid).await.unwrap_err();
-        assert!(not_found.downcast_ref::<BlobNotFoundError>().is_some());
+        match store.get_stream(cid).await {
+            Ok(_) => panic!("expected BlobNotFoundError"),
+            Err(err) => assert!(err.downcast_ref::<BlobNotFoundError>().is_some()),
+        }
 
         store.unquarantine(cid).await.unwrap();
         assert!(store.has_stored(cid).await.unwrap());

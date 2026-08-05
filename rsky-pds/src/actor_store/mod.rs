@@ -210,7 +210,7 @@ impl ActorStore {
     pub async fn read(
         &self,
         did: String,
-        blobstore: Arc<dyn BlobStore>,
+        blobstore: Arc<dyn BlobStore<Stream = crate::actor_store::blobstore::BoxedBlobStream>>,
     ) -> Result<ActorStoreReader> {
         let db = self.open_db(&did).await?;
         let key_location = self.get_location(&did)?.key_location;
@@ -226,7 +226,7 @@ impl ActorStore {
     pub async fn transact(
         &self,
         did: String,
-        blobstore: Arc<dyn BlobStore>,
+        blobstore: Arc<dyn BlobStore<Stream = crate::actor_store::blobstore::BoxedBlobStream>>,
     ) -> Result<ActorStoreTransactor> {
         let guard = self.did_lock(&did).lock_owned().await;
         let db = self.open_db(&did).await?;
@@ -259,7 +259,7 @@ impl ActorStore {
         Ok(())
     }
 
-    pub async fn destroy(&self, did: &str, blobstore: Arc<dyn BlobStore>) -> Result<()> {
+    pub async fn destroy(&self, did: &str, blobstore: Arc<dyn BlobStore<Stream = crate::actor_store::blobstore::BoxedBlobStream>>) -> Result<()> {
         if let Some(delete_all) = blobstore.delete_all() {
             if let Err(err) = delete_all.await {
                 tracing::error!(?err, did, "failed to delete blobs from blobstore");
@@ -344,7 +344,7 @@ impl ActorStoreReader {
     fn new(
         did: String,
         db: ActorDb,
-        blobstore: Arc<dyn BlobStore>,
+        blobstore: Arc<dyn BlobStore<Stream = crate::actor_store::blobstore::BoxedBlobStream>>,
         background_queue: BackgroundQueue,
         key_location: PathBuf,
     ) -> Self {
