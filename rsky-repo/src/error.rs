@@ -21,6 +21,8 @@ pub enum RepoError {
     BadRecordSwapError(Option<Cid>),
     #[error("Invalid record error")]
     InvalidRecordError,
+    #[error("There is already a value at key: {0}")]
+    DuplicateKey(String),
 }
 
 #[derive(Error, Debug)]

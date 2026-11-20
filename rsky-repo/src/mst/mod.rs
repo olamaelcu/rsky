@@ -755,7 +755,7 @@ impl MST {
             let found = self.at_index(index).await?;
             if let Some(NodeEntry::Leaf(l)) = found {
                 if l.key == *key {
-                    return Err(anyhow!("There is already a value at key: {}", key));
+                    return Err(crate::error::RepoError::DuplicateKey(key.to_string()).into());
                 }
             }
             let prev_node = self.at_index(index - 1).await?;

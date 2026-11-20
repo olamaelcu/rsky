@@ -813,6 +813,7 @@ impl From<Error> for ApiError {
         use crate::account_manager::helpers::email_token::EmailTokenError;
         use crate::apis::com::atproto::repo::RepoUnavailable;
         use crate::lifecycle::AccountDeleting;
+        use rsky_repo::error::RepoError;
         if let Some(unavailable) = value.downcast_ref::<RepoUnavailable>() {
             return match unavailable {
                 RepoUnavailable::NotFound(_) => ApiError::RepoNotFound(value.to_string()),
@@ -850,6 +851,12 @@ impl From<Error> for ApiError {
         if let Some(AccountHelperError::UserAlreadyExistsError) = value.downcast_ref() {
             return ApiError::InvalidRequest(
                 "This email address is already in use, please use a different email.".to_string(),
+            );
+        }
+        if let Some(RepoError::DuplicateKey(key)) = value.downcast_ref::<RepoError>() {
+            return ApiError::BadRequest(
+                "AlreadyExists".to_string(),
+                format!("Could not create record: {key} already exists"),
             );
         }
         tracing::error!(error = ?value, "request failed with an internal error");
